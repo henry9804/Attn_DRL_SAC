@@ -44,6 +44,7 @@ class Actor(nn.Module):
         A = torch.reshape(A, [-1, 2, 2])
         A_t = torch.transpose(A, dim0=1, dim1=2)
         log_sigma = torch.matmul(A, A_t)
+        log_sigma = torch.clamp(log_sigma, -10.0, 2.0)
         
         return mu, log_sigma
 

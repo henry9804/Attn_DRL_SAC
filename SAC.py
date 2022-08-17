@@ -67,7 +67,7 @@ class NormalizedActions(gym.ActionWrapper):
 
         return action
 
-env = RacecarGymEnv(renders=True, isDiscrete=False)
+env = RacecarGymEnv(renders=False, isDiscrete=False)
 
 # Set seeds
 env.seed(args.seed)
@@ -179,7 +179,7 @@ class SAC():
             Q1_loss = self.Q1_criterion(excepted_Q1, next_q_value.detach()).mean() # J_Q
             Q2_loss = self.Q2_criterion(excepted_Q2, next_q_value.detach()).mean()
 
-            pi_loss = (log_prob - excepted_new_Q).mean() # according to original paper
+            pi_loss = (log_prob - excepted_new_Q.detach()).mean() # according to original paper
 
             self.writer.add_scalar('Loss/V_loss', V_loss, global_step=self.num_training)
             self.writer.add_scalar('Loss/Q1_loss', Q1_loss, global_step=self.num_training)
@@ -217,7 +217,7 @@ class SAC():
         torch.save(self.policy_net.state_dict(), './SAC_model/policy_net.pth')
         torch.save(self.value_net.state_dict(), './SAC_model/value_net.pth')
         torch.save(self.Q_net1.state_dict(), './SAC_model/Q_net1.pth')
-        torch.save(self.Q_net2.state_dict(), './SAC_model/Q_net1.pth')
+        torch.save(self.Q_net2.state_dict(), './SAC_model/Q_net2.pth')
         print("====================================")
         print("Model has been saved...")
         print("====================================")
@@ -226,7 +226,7 @@ class SAC():
         self.policy_net.load_state_dict(torch.load('./SAC_model/policy_net.pth'))
         self.value_net.load_state_dict(torch.load( './SAC_model/value_net.pth'))
         self.Q_net1.load_state_dict(torch.load('./SAC_model/Q_net1.pth'))
-        self.Q_net2.load_state_dict(torch.load('./SAC_model/Q_net1.pth'))
+        self.Q_net2.load_state_dict(torch.load('./SAC_model/Q_net2.pth'))
         print("model has been load")
 
 

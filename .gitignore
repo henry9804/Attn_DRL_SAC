@@ -131,3 +131,5 @@ dmypy.json
 # model data
 SAC_model/
 test_agent/
+
+test.py

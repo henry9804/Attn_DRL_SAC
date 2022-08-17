@@ -50,13 +50,13 @@ class RacecarGymEnv(gym.Env):
     #self.reset()
     self.state = np.zeros(25, dtype=np.float32)    
     self.obsDim = np.array([40, 40])
-    observation_high = np.ones(self.obsDim) * 1000  #np.inf
+    observation_high = np.ones(self.obsDim, dtype=np.float32) * 1000  #np.inf
     if (isDiscrete):
       self.action_space = spaces.Discrete(9)
     else:
       action_dim = 2
       self._action_bound = 1
-      action_high = np.array([self._action_bound] * action_dim)
+      action_high = np.array([self._action_bound] * action_dim, dtype=np.float32)
       self.action_space = spaces.Box(-action_high, action_high, dtype=np.float32)
     self.observation_space = spaces.Box(-observation_high, observation_high, dtype=np.float32)
     self.viewer = None
@@ -66,7 +66,7 @@ class RacecarGymEnv(gym.Env):
     self._p.setTimeStep(self._timeStep)
 
     self.scale = [.2, .2, .1]
-    self.height_map = create_field(1, meshScale=self.scale)
+    self.height_map = create_field(0, meshScale=self.scale)
     self._racecar = racecar.Racecar(self._p, urdfRootPath=self._urdfRoot, timeStep=self._timeStep, scale=2.0)
 
     dist = 5 + 2. * random.random()
@@ -198,7 +198,7 @@ class RacecarGymEnv(gym.Env):
     return rgb_array
 
   def _termination(self):
-    done = 1 if self.state[0] < 2 else 0
+    done = 1 if self.state[0] < .5 else 0
     return done
 
   def _reward(self):
