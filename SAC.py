@@ -135,7 +135,7 @@ class SAC():
         z = noise.sample([2,1]).to(device)
         x = batch_mu + torch.matmul(batch_sigma, z).reshape([-1, 2])
         action = torch.tanh(x)
-        log_prob = dist.log_prob(x).reshape(-1, 1)
+        log_prob = (dist.log_prob(x) - torch.sum(torch.log(1 - action.pow(2) + min_Val), dim=1)).reshape(-1, 1)   # according to original paper appendix C
         return action, log_prob, z, batch_mu, batch_log_sigma
 
     def update(self):
@@ -179,7 +179,7 @@ class SAC():
             Q1_loss = self.Q1_criterion(excepted_Q1, next_q_value.detach()).mean() # J_Q
             Q2_loss = self.Q2_criterion(excepted_Q2, next_q_value.detach()).mean()
 
-            pi_loss = (log_prob - excepted_new_Q.detach()).mean() # according to original paper
+            pi_loss = (log_prob - excepted_new_Q.detach()).mean() # according to original paper eq.12
 
             self.writer.add_scalar('Loss/V_loss', V_loss, global_step=self.num_training)
             self.writer.add_scalar('Loss/Q1_loss', Q1_loss, global_step=self.num_training)
