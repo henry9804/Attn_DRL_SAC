@@ -67,7 +67,7 @@ class NormalizedActions(gym.ActionWrapper):
 
         return action
 
-env = RacecarGymEnv(renders=False, isDiscrete=False)
+env = RacecarGymEnv(renders=args.render, isDiscrete=False)
 
 # Set seeds
 env.seed(args.seed)
@@ -122,7 +122,7 @@ class SAC():
 
     def store(self, o, s, a, r, o_, s_, d):
         index = self.num_transition % args.capacity
-        transition = Transition(o, s, a, r, o_, s_, d)
+        transition = Transition(o, s, a, r, o_, s_, (d==1))
         self.replay_buffer[index] = transition
         self.num_transition += 1
 
@@ -260,14 +260,17 @@ def main():
                 next_obs, reward, done, next_state = env.step(action[0])
                 ep_r += reward
                 if args.render and i >= args.render_interval : env.render()
-                agent.store(obs, state, action, reward, next_obs, next_state, done)
+                if np.array(next_obs.shape).all() != env.obsDim.all():
+                    print(next_state[:5])
+                else:
+                    agent.store(obs, state, action, reward, next_obs, next_state, done)
 
                 if agent.num_transition >= args.capacity:
                     agent.update()
 
                 obs = next_obs
                 state = next_state
-                if done:
+                if done == 1:
                     if i > 100:
                         print("Ep_i \t{}, the ep_r is \t{}, the step is \t{}".format(i, ep_r, t))
                     break

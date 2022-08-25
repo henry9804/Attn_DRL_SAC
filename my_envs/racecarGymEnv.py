@@ -1,4 +1,5 @@
 import os, inspect
+from warnings import catch_warnings
 currentdir = os.path.dirname(os.path.abspath(inspect.getfile(inspect.currentframe())))
 parentdir = os.path.dirname(os.path.dirname(currentdir))
 os.sys.path.insert(0, parentdir)
@@ -48,7 +49,7 @@ class RacecarGymEnv(gym.Env):
 
     self.seed()
     #self.reset()
-    self.state = np.zeros(25, dtype=np.float32)    
+    self.state = np.zeros(25, dtype=np.float32)
     self.obsDim = np.array([40, 40])
     observation_high = np.ones(self.obsDim, dtype=np.float32) * 1000  #np.inf
     if (isDiscrete):
@@ -65,7 +66,7 @@ class RacecarGymEnv(gym.Env):
     self._p.resetSimulation()
     self._p.setTimeStep(self._timeStep)
 
-    self.scale = [.2, .2, .1]
+    self.scale = [.1, .1, .05]
     self.height_map = create_field(0, meshScale=self.scale)
     self._racecar = racecar.Racecar(self._p, urdfRootPath=self._urdfRoot, timeStep=self._timeStep, scale=2.0)
 
@@ -83,7 +84,7 @@ class RacecarGymEnv(gym.Env):
     self._envStepCounter = 0
     for i in range(100):
       self._p.stepSimulation()
-    obs = self.getObservation()
+    obs, _ = self.getObservation()
     return obs
 
   def __del__(self):
@@ -128,10 +129,11 @@ class RacecarGymEnv(gym.Env):
       angle = 2*np.pi - angle
     angle = angle * (-180/np.pi)
     matrix = cv2.getRotationMatrix2D(center=(carPosInImg_col, carPosInImg_row), angle=-angle, scale=1)
+    h = (int)(self.obsDim[0]/2)
+    w = (int)(self.obsDim[1]/2)
     image = cv2.warpAffine(src=self.height_map, M=matrix, dsize=(map_w, map_h))
-    r = carPosInImg_row - (int)(self.obsDim[0]/2)
-    c = carPosInImg_col - (int)(self.obsDim[1]/2)
-    observation = image[r:r+self.obsDim[0], c:c+self.obsDim[1]] * self.scale[2]
+    image = cv2.copyMakeBorder(image, h, h, w, w, cv2.BORDER_CONSTANT, value=255)
+    observation = image[carPosInImg_row:carPosInImg_row+self.obsDim[0], carPosInImg_col:carPosInImg_col+self.obsDim[1]] * self.scale[2]
     
     grad = np.gradient(observation)
     self.state[5:] = grad[0][0:20, 20]
@@ -143,7 +145,17 @@ class RacecarGymEnv(gym.Env):
     observation -= c
     observation += 0.1 * (e_max-e_min) * (observation>0)
     
-    return observation
+    # done check
+    done = 0
+    margin = 3
+    if carPosInImg_row<margin or carPosInImg_row>=(map_h-margin) or carPosInImg_col<margin or carPosInImg_col>=(map_w-margin):
+      # car is out of world
+      done = 2
+    elif self.state[0] < 1.0:
+      # car arrived at destination
+      done = 1
+
+    return observation, done
 
   def step(self, action):
     if (self._renders):
@@ -164,13 +176,11 @@ class RacecarGymEnv(gym.Env):
       self._p.stepSimulation()
       if self._renders:
         time.sleep(self._timeStep)
-      obs = self.getObservation()
-
-      if self._termination():
+      obs, done = self.getObservation()
+      if done > 0:
         break
       self._envStepCounter += 1
     reward = self._reward()
-    done = self._termination()
 
     return obs, reward, done, self.state
 
@@ -197,17 +207,13 @@ class RacecarGymEnv(gym.Env):
     rgb_array = rgb_array[:, :, :3]
     return rgb_array
 
-  def _termination(self):
-    done = 1 if self.state[0] < .5 else 0
-    return done
-
   def _reward(self):
     w = 0.9 ** np.arange(0, 20, 1, dtype=np.float32)
     r_dist   = -self.state[0]
     r_head   = -np.abs(self.state[1])
     r_stable = math.cos(self.state[3])**2 + math.cos(self.state[4])**2
     r_grad   = -np.dot(w, self.state[5:])
-    beta = np.array([0.5, 1.0, 1.0, 0.1], dtype=np.float32)
+    beta = np.array([0.1, 1.0, 0.5, 0.05], dtype=np.float32)
     reward = np.dot(beta, np.array([r_dist, r_head, r_stable, r_grad], dtype=np.float32))
     return reward
 
