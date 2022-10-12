@@ -130,6 +130,7 @@ dmypy.json
 
 # model data
 SAC_model/
+DWA_RL_model/
 test_agent/
 
 test.py

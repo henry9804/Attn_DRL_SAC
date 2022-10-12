@@ -3,6 +3,7 @@ from collections import namedtuple
 from itertools import count
 import pickle
 import os
+from tabnanny import check
 import numpy as np
 
 
@@ -16,6 +17,7 @@ from torch.distributions import MultivariateNormal
 from tensorboardX import SummaryWriter
 
 from my_envs.racecarGymEnv import RacecarGymEnv
+from my_envs.huskyGymEnv import HuskyGymEnv
 import Attn_DRL
 
 '''
@@ -67,7 +69,7 @@ class NormalizedActions(gym.ActionWrapper):
 
         return action
 
-env = RacecarGymEnv(renders=args.render, isDiscrete=False)
+env = HuskyGymEnv(renders=args.render, isDiscrete=False)
 
 # Set seeds
 env.seed(args.seed)
@@ -115,27 +117,33 @@ class SAC():
         state = torch.FloatTensor(np.expand_dims(state, 0)).to(device)
         mu, log_sigma = self.policy_net(obs, state)
         sigma = torch.exp(log_sigma)
-        dist = MultivariateNormal(mu, sigma)
+        dist = Normal(mu, sigma)
         z = dist.sample()
-        action = torch.tanh(z).detach().cpu().numpy()
+        action = torch.zeros(z.shape)
+        action[:, 0] = torch.sigmoid(z[:, 0])
+        action[:, 1] = torch.tanh(z[:, 1])
+        action = action.detach().numpy()
         return action # return a numpy, float32
 
     def store(self, o, s, a, r, o_, s_, d):
         index = self.num_transition % args.capacity
-        transition = Transition(o, s, a, r, o_, s_, (d==1))
+        transition = Transition(o, s, a, r, o_, s_, d)
         self.replay_buffer[index] = transition
         self.num_transition += 1
 
     def evaluate(self, obs, state):
         batch_mu, batch_log_sigma = self.policy_net(obs, state)
         batch_sigma = torch.exp(batch_log_sigma)
-        dist = MultivariateNormal(batch_mu, batch_sigma)
-        noise = Normal(0, 1)
+        dist = Normal(batch_mu, batch_sigma)
+        gaussian = Normal(0, 1)
 
-        z = noise.sample([2,1]).to(device)
-        x = batch_mu + torch.matmul(batch_sigma, z).reshape([-1, 2])
-        action = torch.tanh(x)
-        log_prob = (dist.log_prob(x) - torch.sum(torch.log(1 - action.pow(2) + min_Val), dim=1)).reshape(-1, 1)   # according to original paper appendix C
+        noise = gaussian.sample()
+        z = batch_mu + batch_sigma * noise.to(device)
+        action = torch.zeros(z.shape).to(device)
+        action[:, 0] = torch.sigmoid(z[:, 0])
+        action[:, 1] = torch.tanh(z[:, 1])
+        # according to original paper appendix C
+        log_prob = (torch.sum(dist.log_prob(z), dim=1) - torch.log(action[:,0]*(1-action[:,0])+min_Val) - torch.log(1-action[:,1].pow(2)+min_Val)).reshape(-1, 1)
         return action, log_prob, z, batch_mu, batch_log_sigma
 
     def update(self):
@@ -178,8 +186,8 @@ class SAC():
             # Dual Q net
             Q1_loss = self.Q1_criterion(excepted_Q1, next_q_value.detach()).mean() # J_Q
             Q2_loss = self.Q2_criterion(excepted_Q2, next_q_value.detach()).mean()
-
-            pi_loss = (log_prob - excepted_new_Q.detach()).mean() # according to original paper eq.12
+            
+            pi_loss = (log_prob - excepted_new_Q).mean() # according to original paper eq.12
 
             self.writer.add_scalar('Loss/V_loss', V_loss, global_step=self.num_training)
             self.writer.add_scalar('Loss/Q1_loss', Q1_loss, global_step=self.num_training)
@@ -187,10 +195,16 @@ class SAC():
             self.writer.add_scalar('Loss/policy_loss', pi_loss, global_step=self.num_training)
 
             # mini batch gradient descent
+
             self.value_optimizer.zero_grad()
             V_loss.backward(retain_graph=True)
             nn.utils.clip_grad_norm_(self.value_net.parameters(), 0.5)
             self.value_optimizer.step()
+            
+            self.policy_optimizer.zero_grad()
+            pi_loss.backward(retain_graph = True)
+            nn.utils.clip_grad_norm_(self.policy_net.parameters(), 0.5)
+            self.policy_optimizer.step()
 
             self.Q1_optimizer.zero_grad()
             Q1_loss.backward(retain_graph = True)
@@ -201,23 +215,20 @@ class SAC():
             Q2_loss.backward(retain_graph = True)
             nn.utils.clip_grad_norm_(self.Q_net2.parameters(), 0.5)
             self.Q2_optimizer.step()
-            
-            self.policy_optimizer.zero_grad()
-            pi_loss.backward(retain_graph = True)
-            nn.utils.clip_grad_norm_(self.policy_net.parameters(), 0.5)
-            self.policy_optimizer.step()
-            
+                        
             # update target v net update
             for target_param, param in zip(self.Target_value_net.parameters(), self.value_net.parameters()):
                 target_param.data.copy_(target_param * (1 - args.tau) + param * args.tau)
-
+            
             self.num_training += 1
 
-    def save(self):
+    def save(self, ep_i):
         torch.save(self.policy_net.state_dict(), './SAC_model/policy_net.pth')
         torch.save(self.value_net.state_dict(), './SAC_model/value_net.pth')
         torch.save(self.Q_net1.state_dict(), './SAC_model/Q_net1.pth')
         torch.save(self.Q_net2.state_dict(), './SAC_model/Q_net2.pth')
+        torch.save({'num_training': self.num_training,
+                    'num_episode': ep_i}, './SAC_model/checkpoint.pth')
         print("====================================")
         print("Model has been saved...")
         print("====================================")
@@ -227,7 +238,11 @@ class SAC():
         self.value_net.load_state_dict(torch.load( './SAC_model/value_net.pth'))
         self.Q_net1.load_state_dict(torch.load('./SAC_model/Q_net1.pth'))
         self.Q_net2.load_state_dict(torch.load('./SAC_model/Q_net2.pth'))
+        checkpoint = torch.load('./SAC_model/checkpoint.pth')
+        self.num_training = checkpoint['num_training']
+        ep_i = checkpoint['num_episode']
         print("model has been load")
+        return ep_i
 
 
 def main():
@@ -243,7 +258,9 @@ def main():
                 next_obs, reward, done, next_state = env.step(action[0])
                 ep_r += reward
                 env.render()
-                if done:
+                if done != 0:
+                    if done == 1:
+                        print("Trial_i \t{}, the ep_r is \t{}, the step is \t{}".format(i, ep_r, t))
                     break
                 obs = next_obs
                 state = next_state
@@ -251,31 +268,34 @@ def main():
         print("====================================")
         print("Collection Experience...")
         print("====================================")
+        ep_start = 0
+        if(args.load):
+            ep_start = agent.load()            
 
-        for i in range(args.iteration):
+        for i in range(ep_start, args.iteration):
             obs = env.reset()
             state = env.state
-            for t in range(200):
+            for t in count():
                 action = agent.select_action(obs, state)
                 next_obs, reward, done, next_state = env.step(action[0])
-                ep_r += reward
-                if args.render and i >= args.render_interval : env.render()
-                if np.array(next_obs.shape).all() != env.obsDim.all():
-                    print(next_state[:5])
+                if done == -1:
+                    break
                 else:
+                    ep_r += reward
+                    if args.render and i >= args.render_interval : env.render()
                     agent.store(obs, state, action, reward, next_obs, next_state, done)
 
-                if agent.num_transition >= args.capacity:
-                    agent.update()
+                    if agent.num_transition >= args.capacity:
+                        agent.update()
 
-                obs = next_obs
-                state = next_state
-                if done == 1:
-                    if i > 100:
-                        print("Ep_i \t{}, the ep_r is \t{}, the step is \t{}".format(i, ep_r, t))
-                    break
+                    obs = next_obs
+                    state = next_state
+                    if done:
+                        if i > 100:
+                            print("Ep_i \t{}, the ep_r is \t{}, the step is \t{}".format(i, ep_r, t))
+                        break
             if i % args.log_interval == 0:
-                agent.save()
+                agent.save(i)
             agent.writer.add_scalar('ep_r', ep_r, global_step=i)
             ep_r = 0
 

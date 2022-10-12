@@ -28,7 +28,9 @@ class Actor(nn.Module):
         )
 
         self.mu = nn.Linear(30, 2)
-        self.log_sigma = nn.Linear(30, 4)
+        self.log_sigma = nn.Sequential(
+            nn.Linear(30, 2)
+        )
 
     def forward(self, obs, state):
         torch.autograd.set_detect_anomaly(True)
@@ -40,20 +42,18 @@ class Actor(nn.Module):
         z = torch.concat([x, y], dim=1)
         z = self.fc2(z)
         mu = self.mu(z)
-        A = self.log_sigma(z)
-        A = torch.reshape(A, [-1, 2, 2])
-        A_t = torch.transpose(A, dim0=1, dim1=2)
-        log_sigma = torch.matmul(A, A_t)
+        log_sigma = self.log_sigma(z)
         log_sigma = torch.clamp(log_sigma, -10.0, 2.0)
         
         return mu, log_sigma
 
-    def attn_mask(self, obs):
+    def cost_map(self, obs):
         x = self.conv1(obs)
         x = self.cbam(x)
-        x = torch.sum(x, dim=1)
+        attn = torch.sum(x, dim=1)
+        cost = attn * obs
 
-        return x
+        return cost
 
 
 class Critic(nn.Module):
@@ -78,8 +78,7 @@ class Critic(nn.Module):
             nn.ReLU(),
             nn.Linear(500, 30),
             nn.ReLU(),
-            nn.Linear(30, 1),
-            nn.Tanh()
+            nn.Linear(30, 1)
         )
 
     def forward(self, obs, state):
@@ -116,8 +115,7 @@ class Q(nn.Module):
             nn.ReLU(),
             nn.Linear(500, 30),
             nn.ReLU(),
-            nn.Linear(30, 1),
-            nn.Tanh()
+            nn.Linear(30, 1)
         )
 
     def forward(self, obs, state, action):
