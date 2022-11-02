@@ -129,8 +129,9 @@ dmypy.json
 .pyre/
 
 # model data
-SAC_model/
-DWA_RL_model/
-test_agent/
+SAC_model*/
+Attn_DRL_model*/
+DWA_RL_model*/
+test_agent*/
 
 test.py

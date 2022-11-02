@@ -43,7 +43,7 @@ class Config():
         self.speed_cost_gain = 0.1 #lower = faster
         self.ele_cost_gain = 3.2 #lower z= fearless
         self.robot_radius = 0.15  # [m]
-        self.scale = np.array([.1, .1, .05])
+        self.scale = np.array([.1, .1, .1])
         self.obsDim = np.array([40, 40])
 
 class HuskyGymEnv(gym.Env):
@@ -74,6 +74,9 @@ class HuskyGymEnv(gym.Env):
 
     self.seed()
     #self.reset()
+    self.config = config
+    #self.height_map = create_field(0, meshScale=self.config.scale)
+
     self.prev_state = np.zeros(25, dtype=np.float32)
     self.state = np.zeros(25, dtype=np.float32)
     observation_high = np.ones(config.obsDim, dtype=np.float32) * 1000  #np.inf
@@ -86,15 +89,15 @@ class HuskyGymEnv(gym.Env):
       self.action_space = spaces.Box(-action_high, action_high, dtype=np.float32)
     self.observation_space = spaces.Box(-observation_high, observation_high, dtype=np.float32)
     self.viewer = None
-    self.config = config
 
   def reset(self):
     self._p.resetSimulation()
     self._p.setTimeStep(self._timeStep)
 
+    #create_field(1, meshScale=self.config.scale, heightMap=self.height_map)
     self.height_map = create_field(0, meshScale=self.config.scale)
     bodyPath = os.path.join(self._urdfRoot, 'husky/husky.urdf')
-    self._husky = husky.Husky(body_path=bodyPath)
+    self._husky = husky.Husky(body_path=bodyPath, init_pos=[0, 0, 0.1])
 
     self.dist = 5 + 2. * random.random()
     ang = 3.1415925438 * random.random() - 1.5707962719
@@ -166,12 +169,22 @@ class HuskyGymEnv(gym.Env):
       
       # done check
       done = 0
-      if self.state[0] < 1.0:
+      if self.state[0] < 0.3:
         done = 1
       elif self._envStepCounter > self._actionRepeat * self._timeOut:
         done = -1
 
     return observation, done
+
+  def getVelocity(self):
+    v, w = self._p.getBaseVelocity(self._husky.robotId)
+    v = np.linalg.norm(v)
+    w = w[2]
+    return v, w
+
+  def getPosition(self):
+    pos, _ = self._p.getBasePositionAndOrientation(self._husky.robotId)
+    return np.array(pos)
 
   def step(self, action):
     if (self._renders):
@@ -236,7 +249,7 @@ class HuskyGymEnv(gym.Env):
     r_dist   = -(self.state[0] / self.dist)
     r_head   = -(np.abs(self.state[1]) / np.pi)
     r_stable = (math.cos(self.state[3])**2 + math.cos(self.state[4])**2) / 2
-    r_grad   = -np.dot(w, self.state[5:])
+    r_grad   = -np.abs(np.dot(w, self.state[5:]))
     beta = np.array([1.2, 1.0, 0.01, 5.0], dtype=np.float32)
     reward = np.dot(beta, np.array([r_dist, r_head, r_stable, r_grad], dtype=np.float32))
     return reward

@@ -4,10 +4,11 @@ import random
 import cv2
 
 useProgrammatic = 0
-useTerrainFromPNG = 1
-useDeepLocoCSV = 2
+useArray = 1
+useTerrainFromPNG = 2
+useDeepLocoCSV = 3
 
-def create_field(heightfieldSource=0, meshScale=[0.01, 0.01, 0.01]):
+def create_field(heightfieldSource=0, meshScale=[0.01, 0.01, 0.01], heightMap=None):
   random.seed(10)
   textureId = -1
   p.configureDebugVisualizer(p.COV_ENABLE_RENDERING,0)
@@ -23,11 +24,21 @@ def create_field(heightfieldSource=0, meshScale=[0.01, 0.01, 0.01]):
         heightfieldData[2*i+1+2*j*numHeightfieldRows]=height
         heightfieldData[2*i+(2*j+1)*numHeightfieldRows]=height
         heightfieldData[2*i+1+(2*j+1)*numHeightfieldRows]=height
-    heightMap = np.resize(np.array(heightfieldData), [numHeightfieldRows, numHeightfieldColumns])
+    heightMap = np.reshape(np.array(heightfieldData), [numHeightfieldRows, numHeightfieldColumns])
     terrainShape = p.createCollisionShape(shapeType = p.GEOM_HEIGHTFIELD, meshScale=meshScale, heightfieldTextureScaling=(numHeightfieldRows-1)/2, heightfieldData=heightfieldData, numHeightfieldRows=numHeightfieldRows, numHeightfieldColumns=numHeightfieldColumns)
     terrain  = p.createMultiBody(0, terrainShape)
     p.resetBasePositionAndOrientation(terrain,[0,0,0], [0,0,0,1])
     p.changeVisualShape(terrain, -1, rgbaColor=[1,1,1,1])
+
+  if heightfieldSource==useArray:
+    [numHeightfieldRows, numHeightfieldColumns] = heightMap.shape
+    heightfieldData = np.reshape(heightMap, [-1])
+    terrainShape = p.createCollisionShape(shapeType = p.GEOM_HEIGHTFIELD, meshScale=meshScale, heightfieldTextureScaling=(numHeightfieldRows-1)/2, heightfieldData=heightfieldData, numHeightfieldRows=numHeightfieldRows, numHeightfieldColumns=numHeightfieldColumns)
+    terrain  = p.createMultiBody(0, terrainShape)
+    p.resetBasePositionAndOrientation(terrain,[0,0,0], [0,0,0,1])
+    p.changeVisualShape(terrain, -1, rgbaColor=[1,1,1,1])
+    p.configureDebugVisualizer(p.COV_ENABLE_RENDERING,1)
+    return
 
   if heightfieldSource==useDeepLocoCSV:
     terrainShape = p.createCollisionShape(shapeType = p.GEOM_HEIGHTFIELD, meshScale=meshScale,fileName = "my_envs/heightmaps/ground0.txt", heightfieldTextureScaling=128)
