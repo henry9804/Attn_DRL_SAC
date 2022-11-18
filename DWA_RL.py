@@ -28,24 +28,25 @@ class DWA_RL():
         obs = torch.tensor(np.expand_dims(obs, 0)).float().to(self.device)
         x = [0, 0, 0, *vel]
         cost_map = self.attn.cost_map(obs)
-        goal = self.compute_goal_position(cost_map, state, scale)
-        return x, cost_map, goal
 
-    def compute_goal_position(self, cmap, state, scale):
-        cost_map = cmap.cpu().detach().numpy()
+        cost_map = cost_map.cpu().detach().numpy()
         gamma = np.pi/6
         r_explore = 0.5 + 0.001 * (1 / np.abs(np.mean(cost_map)))
         if state[0] < r_explore:
             goal = np.array([state[0]*math.cos(state[1]), state[0]*math.sin(state[1])])
+            _, prev = self.dijkstra(cost_map)
         else:
             min_cost = 10000000
-            path_cost = self.dijkstra(cost_map)
+            path_cost, prev = self.dijkstra(cost_map)
+            h, w = cost_map[0].shape
+            start_x = (int)(h/2)
+            start_y = (int)(w/2)
             for theta in np.linspace(state[1] - gamma, state[1] + gamma, 11):
                 goal_condidate = np.array([r_explore*math.cos(theta), r_explore*math.sin(theta)], dtype=int)
-                if path_cost[goal_condidate[0], goal_condidate[1]] < min_cost:
+                if path_cost[start_x+goal_condidate[0], start_y-goal_condidate[1]] < min_cost:
                     goal = goal_condidate
                 goal = goal * scale[:2]
-        return goal
+        return x, cost_map, goal, prev
 
     def dijkstra(self, cost_map):
         # TODO
@@ -55,6 +56,7 @@ class DWA_RL():
         start_x = (int)(h/2)
         start_y = (int)(w/2)
         path_cost[start_x, start_y] = 0
+        prev = np.zeros([h,w,2])
         queue = []
         heapq.heappush(queue, (path_cost[start_x, start_y], start_x, start_y))
         adjacency_list = [(1, 0), (0, 1), (-1, 0), (0, -1)]
@@ -72,8 +74,9 @@ class DWA_RL():
                 new_cost = cur_cost + cost_map[0, adj_x, adj_y]
                 if new_cost < path_cost[adj_x, adj_y]:
                     path_cost[adj_x, adj_y] = new_cost
+                    prev[adj_x, adj_y] = np.array([x, y])
                     heapq.heappush(queue, (new_cost, adj_x, adj_y))
-        return path_cost
+        return path_cost, prev
 
     def select_action(self, obs_space, epsilon=0):
         if np.random.random() > epsilon:
@@ -145,7 +148,6 @@ class DWA(nn.Module):
 
     # Calculate a trajectory sampled across a prediction time
     def calc_trajectory(self, xinit, v, w, config):
-
         x = np.array(xinit)
         traj = np.array(x)  # many motion models stored per trajectory
         time = 0

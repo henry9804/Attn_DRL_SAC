@@ -16,10 +16,13 @@ class Attn_DRL():
         self.Q_net2 = Q().to(device)
 
         self.device = device
-
-    def update_target(self):
+        
         for target_param, param in zip(self.Target_value_net.parameters(), self.value_net.parameters()):
             target_param.data.copy_(param.data)
+
+    def update_target(self, tau):
+        for target_param, param in zip(self.Target_value_net.parameters(), self.value_net.parameters()):
+            target_param.data.copy_(target_param * (1 - tau) + param * tau)
 
     def select_action(self, obs, state):
         obs = torch.FloatTensor(np.expand_dims(obs, 0)).to(self.device)

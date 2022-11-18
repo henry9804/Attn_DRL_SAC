@@ -19,7 +19,6 @@ from tensorboardX import SummaryWriter
 
 from my_envs.huskyGymEnv import HuskyGymEnv
 from Attn_DRL import Attn_DRL
-from Attn_DRL import Critic
 
 '''
 Implementation of soft actor critic, dual Q network version 
@@ -92,7 +91,6 @@ class SAC():
         super(SAC, self).__init__()
 
         self.attn_drl = Attn_DRL(device)
-        self.attn_drl.update_target()
 
         self.policy_optimizer = optim.Adam(self.attn_drl.policy_net.parameters(), lr=args.learning_rate)
         self.value_optimizer = optim.Adam(self.attn_drl.value_net.parameters(), lr=args.learning_rate)
@@ -201,7 +199,7 @@ class SAC():
             self.Q2_optimizer.step()
                         
             # update target v net update
-            self.attn_drl.update_target()
+            self.attn_drl.update_target(args.tau)
             
             self.num_training += 1
 

@@ -148,15 +148,17 @@ def main():
         for i in range(args.iteration):
             obs = env.reset()
             state = env.state
-            v, w = env.getVelocity()
-            x, cost_map, goal = agent.dwa_rl.get_cost_goal(obs, state, [v, w], env.config.scale)
+            cur_pos = env.getPosition()
+            cur_vel = env.getVelocity()
+            x, cost_map, goal, _ = agent.dwa_rl.get_cost_goal(obs, state, cur_pos, cur_vel, env.config.scale)
             obs_space, action_space = agent.dwa_rl.dwa(x, cost_map, goal, env.config)
             for t in count():
                 index = agent.dwa_rl.select_action(obs_space)
                 action = action_space[index]
                 next_obs, reward, done, next_state = env.step(action)
-                v, w = env.getVelocity()
-                x, cost_map, goal = agent.dwa_rl.get_cost_goal(next_obs, next_state, [v, w], env.config.scale)
+                cur_pos = env.getPosition()
+                cur_vel = env.getVelocity()
+                x, cost_map, goal, _ = agent.dwa_rl.get_cost_goal(next_obs, next_state, cur_pos, cur_vel, env.config.scale)
                 next_obs_space, next_action_space = agent.dwa_rl.dwa(x, cost_map, goal, env.config)
                 ep_r += reward
                 env.render()
@@ -173,10 +175,11 @@ def main():
         for i in range(args.iteration):
             obs = env.reset()
             state = env.state
-            v, w = env.getVelocity()
-            x, cost_map, goal = agent.dwa_rl.get_cost_goal(obs, state, [v, w], env.config.scale)
+            cur_pos = env.getPosition()
+            cur_vel = env.getVelocity()
+            x, cost_map, goal, _ = agent.dwa_rl.get_cost_goal(obs, state, cur_pos, cur_vel, env.config.scale)
             obs_space, action_space = agent.dwa_rl.dwa(x, cost_map, goal, env.config)
-            for t in range(200):
+            for t in count():
                 index = agent.dwa_rl.select_action(obs_space, agent.epsilon_by_time())
                 action = action_space[index]
                 next_obs, reward, done, next_state = env.step(action)
@@ -185,8 +188,9 @@ def main():
                     result[i%20] = 0
                     break
                 else:
-                    v, w = env.getVelocity()
-                    x, cost_map, goal = agent.dwa_rl.get_cost_goal(next_obs, next_state, [v, w], env.config.scale)
+                    cur_pos = env.getPosition()
+                    cur_vel = env.getVelocity()
+                    x, cost_map, goal, _ = agent.dwa_rl.get_cost_goal(next_obs, next_state, cur_pos, cur_vel, env.config.scale)
                     next_obs_space, next_action_space = agent.dwa_rl.dwa(x, cost_map, goal, env.config)
                     agent.store(obs_space, index, reward, next_obs_space, done)
 

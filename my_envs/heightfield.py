@@ -9,7 +9,7 @@ useTerrainFromPNG = 2
 useDeepLocoCSV = 3
 
 def create_field(heightfieldSource=0, meshScale=[0.01, 0.01, 0.01], heightMap=None):
-  random.seed(10)
+  random.seed(1)
   textureId = -1
   p.configureDebugVisualizer(p.COV_ENABLE_RENDERING,0)
 
@@ -18,13 +18,15 @@ def create_field(heightfieldSource=0, meshScale=[0.01, 0.01, 0.01], heightMap=No
     numHeightfieldColumns = 256
     heightfieldData = [0]*numHeightfieldRows*numHeightfieldColumns 
     for j in range (int(numHeightfieldColumns/2)):
-      for i in range (int(numHeightfieldRows/2) ):
+      for i in range (int(numHeightfieldRows/2)):
         height = random.uniform(0, 1)
         heightfieldData[2*i+2*j*numHeightfieldRows]=height
         heightfieldData[2*i+1+2*j*numHeightfieldRows]=height
         heightfieldData[2*i+(2*j+1)*numHeightfieldRows]=height
         heightfieldData[2*i+1+(2*j+1)*numHeightfieldRows]=height
-    heightMap = np.reshape(np.array(heightfieldData), [numHeightfieldRows, numHeightfieldColumns])
+    heightMap = np.reshape(np.array(heightfieldData), [numHeightfieldColumns, numHeightfieldRows])
+    heightMap -= heightMap[(int)(numHeightfieldColumns/2), (int)(numHeightfieldRows/2)]
+    heightMap = np.transpose(heightMap)
     terrainShape = p.createCollisionShape(shapeType = p.GEOM_HEIGHTFIELD, meshScale=meshScale, heightfieldTextureScaling=(numHeightfieldRows-1)/2, heightfieldData=heightfieldData, numHeightfieldRows=numHeightfieldRows, numHeightfieldColumns=numHeightfieldColumns)
     terrain  = p.createMultiBody(0, terrainShape)
     p.resetBasePositionAndOrientation(terrain,[0,0,0], [0,0,0,1])

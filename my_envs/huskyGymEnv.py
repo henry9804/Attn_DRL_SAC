@@ -99,11 +99,11 @@ class HuskyGymEnv(gym.Env):
     bodyPath = os.path.join(self._urdfRoot, 'husky/husky.urdf')
     self._husky = husky.Husky(body_path=bodyPath, init_pos=[0, 0, 0.1])
 
-    self.dist = 5 + 2. * random.random()
-    ang = 3.1415925438 * random.random() - 1.5707962719
+    self.dist = 5 + 2. * np.random.random()
+    ang = 3.1415925438 * np.random.random() - 1.5707962719
 
-    cubex = self.dist * math.sin(ang)
-    cubey = self.dist * math.cos(ang)
+    cubex = self.dist * math.cos(ang)
+    cubey = self.dist * math.sin(ang)
     cubez = 1
 
     self._cubeUniqueId = self._p.loadURDF(os.path.join(self._urdfRoot, "cube.urdf"),
@@ -131,24 +131,24 @@ class HuskyGymEnv(gym.Env):
 
     # state
     carorn = pybullet.getEulerFromQuaternion(carorn)
-    self.state[0] = np.linalg.norm(targetPosInCar)                    # d_goal
+    self.state[0] = np.linalg.norm(targetPosInCar[:2])                    # d_goal
     self.state[1] = math.atan2(targetPosInCar[1], targetPosInCar[0])  # a_goal
-    self.state[2]  = math.acos(np.dot(carpos, targetpos)/(np.linalg.norm(carpos)*np.linalg.norm(targetpos)))  # a_rel
-    self.state[3]   = carorn[0] # roll
-    self.state[4]  = carorn[1]  # pitch
+    self.state[2] = math.acos(np.dot(carpos, targetpos)/(np.linalg.norm(carpos)*np.linalg.norm(targetpos)))  # a_rel
+    self.state[3] = carorn[0] # roll
+    self.state[4] = carorn[1]  # pitch
     
     (map_h, map_w) = self.height_map.shape
-    carPosInImg_row = (int)(map_h/2 + carpos[1]/self.config.scale[1])
-    carPosInImg_col = (int)(map_w/2 - carpos[0]/self.config.scale[0])
+    carPosInImg_row = (int)(map_h/2 + carpos[0]/self.config.scale[0])
+    carPosInImg_col = (int)(map_w/2 + carpos[1]/self.config.scale[1])
     if carPosInImg_row<0 or carPosInImg_row>=map_h or carPosInImg_col<0 or carPosInImg_col>=map_w:
       # car is out of world
       observation = None
       done = -1
     else:
       # get observation
-      angle = carorn[2] - np.pi/2
+      angle = np.pi - carorn[2]
       if angle > np.pi:
-        angle = 2*np.pi - angle
+        angle = angle - 2*np.pi
       angle = angle * (-180/np.pi)
       matrix = cv2.getRotationMatrix2D(center=(carPosInImg_col, carPosInImg_row), angle=-angle, scale=1)
       h = (int)(self.config.obsDim[0]/2)
@@ -158,7 +158,7 @@ class HuskyGymEnv(gym.Env):
       observation = image[carPosInImg_row:carPosInImg_row+self.config.obsDim[0], carPosInImg_col:carPosInImg_col+self.config.obsDim[1]] * self.config.scale[2]
       
       grad = np.gradient(observation)
-      self.state[5:] = grad[0][0:20, 20]
+      self.state[5:] = -grad[0][0:20, 20]
       
       # normalize observation
       c = 0.1
@@ -169,7 +169,7 @@ class HuskyGymEnv(gym.Env):
       
       # done check
       done = 0
-      if self.state[0] < 0.3:
+      if self.state[0] < 0.5:
         done = 1
       elif self._envStepCounter > self._actionRepeat * self._timeOut:
         done = -1
@@ -180,7 +180,7 @@ class HuskyGymEnv(gym.Env):
     v, w = self._p.getBaseVelocity(self._husky.robotId)
     v = np.linalg.norm(v)
     w = w[2]
-    return v, w
+    return [v, w]
 
   def getPosition(self):
     pos, _ = self._p.getBasePositionAndOrientation(self._husky.robotId)
